@@ -1,10 +1,7 @@
 <?php
+session_start();
 include 'includes/db.inc.php'; 
 include 'includes/zadnjaDonacija.inc.php';
-
-
-session_start();
-require 'includes/db.inc.php';
 
 if (!isset($_SESSION['jmbg'])) {
     header("Location: login.php");
@@ -12,15 +9,24 @@ if (!isset($_SESSION['jmbg'])) {
 }
 
 $jmbg = $_SESSION['jmbg'];
-$ime = $_SESSION['ime'];
+$ime = $_SESSION['ime'] ?? 'Korisniče';
 
-// Dohvati sve prijave za tog korisnika
 $stmt = $pdo->prepare("SELECT * FROM prijave WHERE jmbg = ? ORDER BY datum_prijave DESC");
 $stmt->execute([$jmbg]);
-$prijave = $stmt->fetchAll();
+$prijave = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
+try {
+    $stmt = $pdo->query("SELECT datum_donacije, vrijeme_donacije 
+                         FROM donacije 
+                         ORDER BY datum_donacije DESC, vrijeme_donacije DESC");
+    $donacije = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    echo "❌ Greška pri dohvaćanju donacija: " . $e->getMessage();
+    exit;
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,7 +43,6 @@ $prijave = $stmt->fetchAll();
             margin: 0;
             padding: 0;
         }
-
         .navbar {
             position: sticky;
             top: 0;
@@ -45,79 +50,35 @@ $prijave = $stmt->fetchAll();
             padding: 15px 0;
             transition: background-color 0.3s ease;
         }
-
         .navbar.scrolled {
             background-color: rgba(211, 211, 211, 0.9);
         }
-
         .navbar-nav {
             margin: auto;
         }
-
         .navbar-brand img {
             height: 50px;
         }
-
         .navbar-nav .nav-link {
             color: #333;
         }
-
         .navbar-nav .nav-link:hover {
             color:rgb(179, 0, 9);
-        }
-
-        .news-box {
-            background-image: url('img/ddk.jpg'); /* Zamijeni s stvarnom putanjom do slike */
-            background-size: cover;
-            background-position: center;
-            height: 400px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-        }
-
-        .news-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5); /* Zacrnjenje slike */
-            z-index: 1;
-        }
-
-        .news-content {
-            color: white;
-            text-align: center;
-            z-index: 2;
-        }
-
-        .news-content h2 {
-            font-size: 2.5rem;
-            margin-bottom: 20px;
-        }
-
-        .news-content .btn {
-            margin-top: 15px;
         }
     </style>
 </head>
 <body>
 
-<!-- Navbar -->
 <nav class="navbar navbar-expand-lg">
   <div class="container">
-    <a class="navbar-brand" href="#"><img src="img/logockfbih.png" alt="Logo"></a>
+    <a class="navbar-brand" href="index.php"><img src="img/logo.png" alt="Logo"></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
-
     <div class="collapse navbar-collapse" id="navbarNavDropdown">
       <ul class="navbar-nav">
         <li class="nav-item">
-          <a class="nav-link active" aria-current="page" href="pocetna.php">Početna</a>
+          <a class="nav-link active" href="pocetna.php">Početna</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#">O nama</a>
@@ -128,7 +89,6 @@ $prijave = $stmt->fetchAll();
         <li class="nav-item">
           <a class="nav-link" href="#">Aktivnosti</a>
         </li>
-    
       </ul>
 
       <div class="d-flex ms-auto">
@@ -136,49 +96,104 @@ $prijave = $stmt->fetchAll();
       </div>
     </div>
   </div>
-</nav>  
+</nav>
+
 <div class="container my-5">
   <div class="row">
-    <!-- Left Side: Previous Donations -->
-     <!-- Left Side: Previous Donations -->
-     <div class="col-md-6">
-     <h2>Dobrodošli, <?php echo htmlspecialchars($ime); ?></h2>
-
-<h4>Vaša prethodna darivanja:</h4>
-
-<?php if (count($prijave) > 0): ?>
-    <ul>
-        <?php foreach ($prijave as $prijava): ?>
-            <li>
-                <?php echo htmlspecialchars($prijava['datum_prijave']); ?>
-            </li>
-        <?php endforeach; ?>
-    </ul>
-<?php else: ?>
-    <p>Nemate prethodnih prijava.</p>
-<?php endif; ?>
-
+    <div class="col-md-6">
+      <h2>Dobrodošli, <?php echo htmlspecialchars($ime); ?></h2>
+      <h4>Vaša prethodna darivanja:</h4>
+      <?php if (count($prijave) > 0): ?>
+        <ul class="mt-4 list-group">
+            <?php foreach ($prijave as $prijava): ?>
+                <li class="list-group-item">
+                    <?php echo htmlspecialchars($prijava['datum_prijave']); ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+      <?php else: ?>
+        <p>Nemate prethodnih prijava.</p>
+      <?php endif; ?>
     </div>
 
-    <!-- Right Side: Upcoming Donation Dates -->
     <div class="col-md-6">
       <h2 class="text-center mb-4">Nadolazeći termini darivanja</h2>
-      <div class="card mb-3">
-        <div class="card-body">
-          <h5 class="card-title">Datum: 10.05.2025</h5>
-          <p class="card-text">Vrijeme: 11:00 - 15:00</p>
+      
+     
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#adminModal">Dodaj nadolazeću donaciju</button>
+
+        <?php if (count($donacije) > 0): ?>
+        <ul class="list-group mt-3">
+            <?php foreach ($donacije as $d): ?>
+                <li class="list-group-item">
+                    <?php
+                        $datum = htmlspecialchars(date("d.m.Y", strtotime($d['datum_donacije'])));
+                        $vrijeme = htmlspecialchars(substr($d['vrijeme_donacije'], 0, 5));
+                        echo "$datum u $vrijeme";
+                    ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    <?php else: ?>
+        <p class="mt-3">Nema trenutno zakazanih termina.</p>
+    <?php endif; ?>
+
+      <div class="modal fade" id="adminModal" tabindex="-1" aria-labelledby="adminModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+            <h5 class="modal-title mb-3" id="adminModalLabel">Dodaj nadolazeću donaciju</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form action="dodaj_donaciju.php" method="POST">
+                <div class="mb-3">
+                  <label for="adminIme" class="form-label">Korisničko ime</label>
+                  <input type="text" class="form-control" id="adminIme" name="adminIme" required>
+                </div>
+                <div class="mb-3">
+                  <label for="adminSifra" class="form-label">Šifra</label>
+                  <input type="password" class="form-control" id="adminSifra" name="adminSifra" required>
+                </div>
+                <div class="mb-3">
+                  <label for="datumDonacije" class="form-label">Datum donacije</label>
+                  <input type="date" class="form-control" id="datumDonacije" name="datumDonacije" required>
+                </div>
+                <div class="mb-3">
+                  <label for="vrijemeDonacije" class="form-label">Vrijeme donacije</label>
+                  <input type="time" class="form-control" id="vrijemeDonacije" name="vrijemeDonacije" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Dodaj donaciju</button>
+                <div class="text-center mt-3">
+                  <a href="novi_admin.php" class="btn btn-sm btn-outline-secondary">Novi admin? Prijavite se.</a>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="card mb-3">
-        <div class="card-body">
-          <h5 class="card-title">Datum: 20.05.2025</h5>
-          <p class="card-text">Vrijeme: 08:00 - 12:00</p>
-        </div>
-      </div>
-      <div class="card mb-3">
-        <div class="card-body">
-          <h5 class="card-title">Datum: 05.06.2025</h5>
-          <p class="card-text">Vrijeme: 10:00 - 14:00</p>
+
+      <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="loginModalLabel">Unesi admin podatke</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form action="login_admin.php" method="POST">
+                <div class="mb-3">
+                  <label for="adminUsername" class="form-label">Admin korisničko ime</label>
+                  <input type="text" class="form-control" id="adminUsername" name="adminUsername" required>
+                </div>
+                <div class="mb-3">
+                  <label for="adminPassword" class="form-label">Lozinka</label>
+                  <input type="password" class="form-control" id="adminPassword" name="adminPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Prijavi se</button> 
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -186,12 +201,17 @@ $prijave = $stmt->fetchAll();
 </div>
 
 <script>
-    window.onscroll = function() {
-        const navbar = document.querySelector('.navbar');
-        if (window.scrollY > 10) {
-            navbar.classList.add('scrolled');
-        } else {
-            navbar.classList.remove('scrolled');
-        }
-    };
+  window.onscroll = function() {
+    const navbar = document.querySelector('.navbar');
+    if (window.scrollY > 10) {
+        navbar.classList.add('scrolled');
+    } else {
+        navbar.classList.remove('scrolled');
+    }
+  };
 </script>
+
+
+
+</body>
+</html>
